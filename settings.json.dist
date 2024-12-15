@@ -1,0 +1,20 @@
+{
+    "telegram": {
+        "bot_token": "1234556789:ABCDEFGHI",
+        "chat_ids": [123456789]
+    },
+    "cameras": [{
+        "name": "camera1",
+        "ip_address": "192.168.x.y",
+        "httpd_port": "80",
+        "username": "boss",
+        "password": "secret123"
+    },
+    {
+        "name": "camera-outdoor",
+        "ip_address": "192.168.x.z",
+        "httpd_port": "80",
+        "username": "admin",
+        "password": "secret567"
+    }]
+}
