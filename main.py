@@ -1,15 +1,16 @@
-import re
-import os
-import json
-import requests
-import threading
-import aiomqtt
 import asyncio
+import json
 import logging
+import os
+import re
+import threading
 
-from telegram import Update, Bot, InputMediaVideo
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+import aiomqtt
+from telegram import Bot, InputMediaVideo, Update
 from telegram.constants import ParseMode
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+
+from YICamera import YICamera
 
 for log_name in [
     "httpx",
@@ -37,63 +38,11 @@ root_logger.addHandler(stream_handler)
 SETTINGS = json.load(open(os.path.join(os.getcwd(), "settings.json"), encoding="utf-8"))
 CAMERAS = {}
 
-class YICamera:
-    def __init__(
-        self,
-        name: str,
-        ip_address: str,
-        httpd_port: str,
-        username: str = None,
-        password: str = None,
-    ):
-        self.name = name
-        self.base_url = f"http://{ip_address}:{httpd_port}"
-        self.session = requests.Session()
-        if username is not None and password is not None:
-            self.session.auth = (username, password)
-
-        self.logger = logging.getLogger(f"YICamera[{name}]")
-
-        self.system_conf = self.__get_config("system")
-        self.mqtt_enabled = self.system_conf.get("MQTT", "no") == "yes"
-        self.mqtt_conf = self.__get_config("mqtt")
-
-    def snapshot(self, res: str = "low", watermark: str = "no") -> bytes:
-        self.logger.info("Requesting snapshot, res=%s, watermark=%s", res, watermark)
-        r = self.session.get(
-            f"{self.base_url}/cgi-bin/snapshot.sh",
-            params={"res": res, "watermark": watermark},
-        )
-        self.logger.debug("Status code: %d, elapsed: %s", r.status_code, r.elapsed)
-        return r.content
-
-    def eventsdir(self) -> list:
-        self.logger.info("Requesting eventsdir")
-        r = self.session.get(f"{self.base_url}/cgi-bin/eventsdir.sh")
-        self.logger.debug("Status code: %d, elapsed: %s", r.status_code, r.elapsed)
-        return r.json().get("records", [])
-
-    def eventsfile(self, dirname: str) -> dict:
-        self.logger.info("Requesting events file %s", dirname)
-        r = self.session.get(f"{self.base_url}/cgi-bin/eventsfile.sh?dirname={dirname}")
-        self.logger.debug("Status code: %d, elapsed: %s", r.status_code, r.elapsed)
-        return r.json()
-
-    def get_video(self, path: str) -> bytes:
-        self.logger.info("Requesting video: %s", path)
-        r = self.session.get(f"{self.base_url}/record/{path}")
-        self.logger.debug("Status code: %d, elapsed: %s", r.status_code, r.elapsed)
-        return r.content
-
-    def __get_config(self, conf: str = "system") -> dict:
-        self.logger.info("Requesting %s config", conf)
-        r = self.session.get(f"{self.base_url}/cgi-bin/get_configs.sh?conf={conf}")
-        self.logger.debug("Status code: %d, elapsed: %s", r.status_code, r.elapsed)
-        return r.json()
-
 
 def is_authorized(chat_id: str) -> bool:
-    return str(chat_id) in [str(_id) for _id in SETTINGS.get("telegram", {}).get('chat_ids',  [])]
+    return str(chat_id) in [
+        str(_id) for _id in SETTINGS.get("telegram", {}).get("chat_ids", [])
+    ]
 
 
 async def callback_hello(update: Update, _) -> None:
@@ -102,9 +51,22 @@ async def callback_hello(update: Update, _) -> None:
 
     await update.message.reply_text(
         "<b>Allowed commands:</b>\n\n"
-        + "\n".join([f"- {c}" for c in ["/cameras", "/video", "/snapshot", "/eventsdir", "/eventsfile", "/last_video"]]),
+        + "\n".join(
+            [
+                f"- {c}"
+                for c in [
+                    "/cameras",
+                    "/video",
+                    "/snapshot",
+                    "/eventsdir",
+                    "/eventsfile",
+                    "/last_video",
+                ]
+            ]
+        ),
         parse_mode=ParseMode.HTML,
     )
+
 
 async def callback_cameras(update: Update, _) -> None:
     if is_authorized(update.message.from_user.id) is False:
@@ -185,14 +147,16 @@ async def callback_eventsfile(
                 + "\n".join(
                     [
                         f'- {n["time"]}\n  {n["filename"]}\n  <code>{dirname}/{n["filename"]}</code>'
-                        for n in eventsfile['records'][:20]
+                        for n in eventsfile["records"][:20]
                     ]
                 ),
                 parse_mode=ParseMode.HTML,
             )
             await wait_message.delete()
     else:
-        await update.effective_message.reply_text("Usage: eventsfile <camera_name> <dirname>")
+        await update.effective_message.reply_text(
+            "Usage: eventsfile <camera_name> <dirname>"
+        )
 
 
 async def callback_eventsdir(
@@ -252,7 +216,7 @@ async def callback_last_video(
                 eventsfile = eventsfile.get("records", [])
                 last_file = eventsfile[0] if len(eventsfile) > 0 else None
                 if last_file is not None:
-                    path = f"{last_event["dirname"]}/{last_file['filename']}"
+                    path = f"{last_event['dirname']}/{last_file['filename']}"
                     video = CAMERAS[camera_name]["camera"].get_video(path)
                     await update.message.reply_video(
                         video,
@@ -305,7 +269,6 @@ async def mqtt_subscribe(camera: YICamera):
         username=camera.mqtt_conf["MQTT_USER"],
         password=camera.mqtt_conf["MQTT_PASSWORD"],
     ) as client:
-
         await client.subscribe(f"{camera.mqtt_conf['MQTT_PREFIX']}/#")
         logger.info("Subscibed to: %s/#", camera.mqtt_conf["MQTT_PREFIX"])
 
