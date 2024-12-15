@@ -92,7 +92,7 @@ async def callback_snapshot(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             )
         else:
             wait_message = await update.effective_message.reply_text("Please wait...")
-            photo = CAMERAS[camera_name]["camera"].snapshot(res="hight", watermark="no")
+            photo = CAMERAS[camera_name].snapshot(res="hight", watermark="no")
             await update.message.reply_photo(photo, quote=True)
             await wait_message.delete()
     else:
@@ -113,7 +113,7 @@ async def callback_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             )
         else:
             wait_message = await update.effective_message.reply_text("Please wait...")
-            video = CAMERAS[camera_name]["camera"].get_video(path)
+            video = CAMERAS[camera_name].get_video(path)
             await update.message.reply_video(
                 video,
                 caption=f"<code>{path}</code>",
@@ -141,7 +141,7 @@ async def callback_eventsfile(
             )
         else:
             wait_message = await update.effective_message.reply_text("Please wait...")
-            eventsfile = CAMERAS[camera_name]["camera"].eventsfile(dirname)
+            eventsfile = CAMERAS[camera_name].eventsfile(dirname)
             await update.message.reply_text(
                 f"<b>Events eventsfile for: {eventsfile['date']}</b>\n\n"
                 + "\n".join(
@@ -175,7 +175,7 @@ async def callback_eventsdir(
         else:
             # {{ "datetime": "Date: 2024-12-12 Time: 12:00", "dirname": "2024Y12M12D12H" }}
             wait_message = await update.effective_message.reply_text("Please wait...")
-            eventsdir = CAMERAS[camera_name]["camera"].eventsdir()
+            eventsdir = CAMERAS[camera_name].eventsdir()
             await update.message.reply_text(
                 "<b>Events dir:</b>\n\n"
                 + "\n".join(
@@ -207,17 +207,15 @@ async def callback_last_video(
         else:
             wait_message = await update.effective_message.reply_text("Please wait...")
 
-            eventsdir = CAMERAS[camera_name]["camera"].eventsdir()
+            eventsdir = CAMERAS[camera_name].eventsdir()
             last_event = eventsdir[0] if len(eventsdir) > 0 else None
             if last_event is not None:
-                eventsfile = CAMERAS[camera_name]["camera"].eventsfile(
-                    last_event["dirname"]
-                )
+                eventsfile = CAMERAS[camera_name].eventsfile(last_event["dirname"])
                 eventsfile = eventsfile.get("records", [])
                 last_file = eventsfile[0] if len(eventsfile) > 0 else None
                 if last_file is not None:
                     path = f"{last_event['dirname']}/{last_file['filename']}"
-                    video = CAMERAS[camera_name]["camera"].get_video(path)
+                    video = CAMERAS[camera_name].get_video(path)
                     await update.message.reply_video(
                         video,
                         caption=f"<code>{path}</code>",
@@ -307,9 +305,10 @@ if __name__ == "__main__":
         )
 
         if c.mqtt_enabled is True:
-            t.start()
+            c.mqtt_thread = t
+            c.mqtt_thread.start()
 
-        CAMERAS[camera_setting["name"]] = {"camera": c, "mqtt_t": t}
+        CAMERAS[camera_setting["name"]] = c
 
     app = ApplicationBuilder().token(SETTINGS["telegram"]["bot_token"]).build()
 

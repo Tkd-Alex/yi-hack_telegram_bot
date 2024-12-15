@@ -24,6 +24,8 @@ class YICamera:
         self.mqtt_enabled = self.system_conf.get("MQTT", "no") == "yes"
         self.mqtt_conf = self.__get_config("mqtt")
 
+        self.mqtt_thread = None
+
     def snapshot(self, res: str = "low", watermark: str = "no") -> bytes:
         self.logger.info("Requesting snapshot, res=%s, watermark=%s", res, watermark)
         r = self.session.get(
